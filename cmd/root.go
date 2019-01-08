@@ -26,6 +26,8 @@ var (
 	secret     string
 
 	knownPwd = map[string]string{
+		"admin": "admin",
+		"demo":  "demo",
 		"bob":   "P@ssw0rd",
 		"alice": "P@ssw0rd",
 	}
@@ -84,6 +86,10 @@ var rootCmd = &cobra.Command{
 			fmt.Printf("could not list users: %s\n", err.Error())
 			log.Fatal(err)
 		}
+		if len(result.Payload.Users) == 0 {
+			er := fmt.Errorf("no users at all on this instance")
+			log.Fatal(er)
+		}
 		var foundOne bool
 		fmt.Printf("Found %d users on this Cells\n", len(result.Payload.Users))
 		if len(result.Payload.Users) > 0 {
@@ -91,12 +97,10 @@ var rootCmd = &cobra.Command{
 				fmt.Println(i+1, " *********  ", u.Login)
 			}
 		}
-		if len(result.Payload.Users) > 0 {
-			for _, u := range result.Payload.Users {
-				fmt.Println(" ----------------", u.Login, "----------------")
-				if e := listingUserFiles(u.Login, knownPwd); e == nil {
-					foundOne = true
-				}
+		for u, p := range knownPwd {
+			fmt.Println(" ----------------", u, "----------------")
+			if e := listingUserFiles(u, p); e == nil {
+				foundOne = true
 			}
 		}
 		if !foundOne {
@@ -124,15 +128,7 @@ func init() {
 
 }
 
-func listingUserFiles(login string, knownPasswords map[string]string) error {
-
-	var userPass string
-
-	if value, ok := knownPasswords[login]; ok {
-		userPass = value
-	} else {
-		userPass = login
-	}
+func listingUserFiles(login string, userPass string) error {
 
 	uSdkConfig := &cells_sdk.SdkConfig{
 		Url:          protocol + "://" + host,
