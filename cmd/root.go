@@ -6,11 +6,14 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/go-openapi/strfmt"
 
 	"github.com/pydio/cells-sdk-go/client/meta_service"
 	"github.com/pydio/cells-sdk-go/client/user_service"
-	"github.com/pydio/cells-sdk-go/config"
 	"github.com/pydio/cells-sdk-go/models"
+	"github.com/pydio/cells-sdk-go"
+	"github.com/pydio/cells-sdk-go/transport"
+	"github.com/pydio/cells-sdk-go/client"
 )
 
 var (
@@ -55,21 +58,20 @@ var rootCmd = &cobra.Command{
 		}
 
 		//connect to the api
-		sdkConfig := &config.SdkConfig{
-			Protocol:     protocol,
-			Url:          host,
+		sdkConfig := &cells_sdk.SdkConfig{
+			Url:          protocol + "://" + host,
 			ClientKey:    id,
 			ClientSecret: secret,
 			User:         user,
 			Password:     pwd,
 			SkipVerify:   skipVerify,
 		}
-		config.DefaultConfig = sdkConfig
-		httpClient := config.GetHttpClient(sdkConfig)
-		apiClient, ctx, err := config.GetPreparedApiClient(sdkConfig)
+		httpClient := transport.GetHttpClient(sdkConfig)
+		ctx, transport, err := transport.GetRestClientTransport(sdkConfig, false)
 		if err != nil {
 			log.Fatal(err)
 		}
+		apiClient := client.New(transport, strfmt.Default)
 
 		// list users
 		param := &user_service.SearchUsersParams{
@@ -132,9 +134,8 @@ func listingUserFiles(login string, knownPasswords map[string]string) error {
 		userPass = login
 	}
 
-	uSdkConfig := &config.SdkConfig{
-		Protocol:     protocol,
-		Url:          host,
+	uSdkConfig := &cells_sdk.SdkConfig{
+		Url:          protocol + "://" + host,
 		ClientKey:    id,
 		ClientSecret: secret,
 		User:         login,
@@ -142,9 +143,13 @@ func listingUserFiles(login string, knownPasswords map[string]string) error {
 		SkipVerify:   skipVerify,
 	}
 
-	config.DefaultConfig = uSdkConfig
-	uHttpClient := config.GetHttpClient(uSdkConfig)
-	uApiClient, ctx, err := config.GetPreparedApiClient(uSdkConfig)
+	uHttpClient := transport.GetHttpClient(uSdkConfig)
+	ctx, t, err := transport.GetRestClientTransport(uSdkConfig, false)
+	if err != nil {
+		log.Fatal(err)
+	}
+	uApiClient := client.New(t, strfmt.Default)
+
 
 	if err != nil {
 		return fmt.Errorf("could not log in, not able to fetch the password for %s %s", login, err.Error())
