@@ -5,15 +5,15 @@ import (
 	"log"
 	"os"
 
-	"github.com/spf13/cobra"
 	"github.com/go-openapi/strfmt"
+	"github.com/spf13/cobra"
 
+	cells_sdk "github.com/pydio/cells-sdk-go"
+	"github.com/pydio/cells-sdk-go/client"
 	"github.com/pydio/cells-sdk-go/client/meta_service"
 	"github.com/pydio/cells-sdk-go/client/user_service"
 	"github.com/pydio/cells-sdk-go/models"
-	"github.com/pydio/cells-sdk-go"
 	"github.com/pydio/cells-sdk-go/transport"
-	"github.com/pydio/cells-sdk-go/client"
 )
 
 var (
@@ -27,16 +27,15 @@ var (
 
 	knownPwd = map[string]string{
 		"admin": "admin",
-		"demo":  "demo",
-		"bob":   "P@ssw0rd",
-		"alice": "P@ssw0rd",
+		"bob":   "bob",
+		"alice": "alice",
 	}
 )
 
 var rootCmd = &cobra.Command{
 	Use:   os.Args[0],
 	Short: "Ping demo server",
-	Long:  `Send a listUsers request then tries to list workspaces for each users on demo server`,
+	Long:  `This command sends a listUsers request to the demo server and then tries to list the workspaces for each of the default users`,
 	Run: func(cmd *cobra.Command, args []string) {
 
 		//check for the flags
@@ -56,7 +55,7 @@ var rootCmd = &cobra.Command{
 			log.Fatal("Provide the password")
 		}
 		if secret == "" {
-			log.Fatal("Provide a secert key")
+			log.Fatal("Provide a secret key")
 		}
 
 		//connect to the api
@@ -87,11 +86,11 @@ var rootCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 		if len(result.Payload.Users) == 0 {
-			er := fmt.Errorf("no users at all on this instance")
+			er := fmt.Errorf("no user at all on this instance")
 			log.Fatal(er)
 		}
 		var foundOne bool
-		fmt.Printf("Found %d users on this Cells\n", len(result.Payload.Users))
+		fmt.Printf("Found %d users in this instance\n", len(result.Payload.Users))
 		if len(result.Payload.Users) > 0 {
 			for i, u := range result.Payload.Users {
 				fmt.Println(i+1, " *********  ", u.Login)
@@ -104,27 +103,26 @@ var rootCmd = &cobra.Command{
 			}
 		}
 		if !foundOne {
-			log.Fatal("Could not find any workspaces for any users, something strange happened!")
+			log.Fatal("Could not find any workspace for any user: check the demo server to further investigate")
 		}
 	},
 }
 
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		log.Fatal("Execution error", err)
+		log.Fatal("Cannot execute root command", err)
 	}
 
 }
 
 func init() {
 
-	//7
-	rootCmd.PersistentFlags().StringVarP(&protocol, "protocol", "t", "", "protocol type HTTP or HTTPS")
-	rootCmd.PersistentFlags().StringVarP(&host, "host", "a", "", "hostname of the cells instance")
-	rootCmd.PersistentFlags().StringVarP(&user, "user", "u", "", "username")
-	rootCmd.PersistentFlags().StringVarP(&pwd, "password", "p", "", "password of the user")
-	rootCmd.PersistentFlags().StringVarP(&id, "clientKey", "k", "", "put the clientKey found in pydio.json")
-	rootCmd.PersistentFlags().StringVarP(&secret, "clientSecret", "s", "", "put the clientSecret found in pydio.json")
+	rootCmd.PersistentFlags().StringVarP(&protocol, "protocol", "t", "", "HTTP or HTTPS")
+	rootCmd.PersistentFlags().StringVarP(&host, "host", "a", "", "FQDN of this server")
+	rootCmd.PersistentFlags().StringVarP(&user, "user", "u", "", "A registered admin user name")
+	rootCmd.PersistentFlags().StringVarP(&pwd, "password", "p", "", "A registered admin user password")
+	rootCmd.PersistentFlags().StringVarP(&id, "clientKey", "k", "", "The front-end client key (can be found in the pydio.json)")
+	rootCmd.PersistentFlags().StringVarP(&secret, "clientSecret", "s", "", "The front-end client secret (can be found in the pydio.json)")
 
 }
 
@@ -145,7 +143,6 @@ func listingUserFiles(login string, userPass string) error {
 		log.Fatal(err)
 	}
 	uApiClient := client.New(t, strfmt.Default)
-
 
 	if err != nil {
 		return fmt.Errorf("could not log in, not able to fetch the password for %s %s", login, err.Error())
