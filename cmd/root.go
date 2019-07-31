@@ -8,12 +8,13 @@ import (
 	"github.com/go-openapi/strfmt"
 	"github.com/spf13/cobra"
 
-	cells_sdk "github.com/pydio/cells-sdk-go"
+	"github.com/pydio/cells-sdk-go"
 	"github.com/pydio/cells-sdk-go/client"
 	"github.com/pydio/cells-sdk-go/client/meta_service"
 	"github.com/pydio/cells-sdk-go/client/user_service"
 	"github.com/pydio/cells-sdk-go/models"
 	"github.com/pydio/cells-sdk-go/transport"
+	"github.com/pydio/cells-sdk-go/transport/http"
 )
 
 var (
@@ -67,7 +68,7 @@ var rootCmd = &cobra.Command{
 			Password:     pwd,
 			SkipVerify:   skipVerify,
 		}
-		httpClient := transport.GetHttpClient(sdkConfig)
+		httpClient := http.GetHttpClient(sdkConfig)
 		ctx, transport, err := transport.GetRestClientTransport(sdkConfig, false)
 		if err != nil {
 			log.Fatal(err)
@@ -137,18 +138,12 @@ func listingUserFiles(login string, userPass string) error {
 		SkipVerify:   skipVerify,
 	}
 
-	uHttpClient := transport.GetHttpClient(uSdkConfig)
+	uHttpClient := http.GetHttpClient(uSdkConfig)
 	ctx, t, err := transport.GetRestClientTransport(uSdkConfig, false)
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("could not log in, not able to fetch the password for %s %s", login, err.Error())
 	}
 	uApiClient := client.New(t, strfmt.Default)
-
-	if err != nil {
-		return fmt.Errorf("could not log in, not able to fetch the password for %s %s", login, err.Error())
-	} else {
-		log.Println("Successfully logged ", login)
-	}
 
 	params := &meta_service.GetBulkMetaParams{
 		Body: &models.RestGetBulkMetaRequest{NodePaths: []string{
