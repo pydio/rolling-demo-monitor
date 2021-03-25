@@ -4,33 +4,34 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/go-openapi/strfmt"
 	"github.com/spf13/cobra"
 
-	"github.com/pydio/cells-sdk-go"
-	"github.com/pydio/cells-sdk-go/client"
-	"github.com/pydio/cells-sdk-go/client/meta_service"
-	"github.com/pydio/cells-sdk-go/client/user_service"
-	"github.com/pydio/cells-sdk-go/models"
-	"github.com/pydio/cells-sdk-go/transport"
-	"github.com/pydio/cells-sdk-go/transport/http"
+	cells_sdk "github.com/pydio/cells-sdk-go/v2"
+	"github.com/pydio/cells-sdk-go/v2/client"
+	"github.com/pydio/cells-sdk-go/v2/client/meta_service"
+	"github.com/pydio/cells-sdk-go/v2/client/user_service"
+	"github.com/pydio/cells-sdk-go/v2/models"
+	sdk_rest "github.com/pydio/cells-sdk-go/v2/transport/rest"
 )
 
 var (
-	protocol   string
-	host       string
-	id         string
+	url        string
 	user       string
 	pwd        string
 	skipVerify bool
-	secret     string
 
-	knownPwd = map[string]string{
+	demoUsers = map[string]string{
 		"admin": "admin",
 		"bob":   "bob",
 		"alice": "alice",
 	}
+)
+
+const (
+	userAgent = "demo-monitor/1.0"
 )
 
 var rootCmd = &cobra.Command{
@@ -39,46 +40,25 @@ var rootCmd = &cobra.Command{
 	Long:  `This command sends a listUsers request to the demo server and then tries to list the workspaces for each of the default users`,
 	Run: func(cmd *cobra.Command, args []string) {
 
-		//check for the flags
-		if protocol == "" {
-			log.Fatal("Provide the protocol type")
-		}
-		if host == "" {
-			log.Fatal("Provide the host")
-		}
-		if id == "" {
-			log.Fatal("Provide the id")
-		}
-		if user == "" {
-			log.Fatal("Provide the user")
-		}
-		if pwd == "" {
-			log.Fatal("Provide the password")
-		}
-		if secret == "" {
-			log.Fatal("Provide a secret key")
+		sanityCheck()
+
+		sdkConfig := &cells_sdk.SdkConfig{
+			Url:           url,
+			User:          user,
+			Password:      pwd,
+			SkipVerify:    skipVerify,
+			CustomHeaders: map[string]string{"User-Agent": userAgent},
 		}
 
-		//connect to the api
-		sdkConfig := &cells_sdk.SdkConfig{
-			Url:          protocol + "://" + host,
-			ClientKey:    id,
-			ClientSecret: secret,
-			User:         user,
-			Password:     pwd,
-			SkipVerify:   skipVerify,
+		ctx, t, e := sdk_rest.GetClientTransport(sdkConfig, false)
+		if e != nil {
+			log.Fatal(e)
 		}
-		httpClient := http.GetHttpClient(sdkConfig)
-		ctx, transport, err := transport.GetRestClientTransport(sdkConfig, false)
-		if err != nil {
-			log.Fatal(err)
-		}
-		apiClient := client.New(transport, strfmt.Default)
+		apiClient := client.New(t, strfmt.Default)
 
 		// list users
 		param := &user_service.SearchUsersParams{
-			Context:    ctx,
-			HTTPClient: httpClient,
+			Context: ctx,
 		}
 
 		result, err := apiClient.UserService.SearchUsers(param)
@@ -91,13 +71,15 @@ var rootCmd = &cobra.Command{
 			log.Fatal(er)
 		}
 		var foundOne bool
-		fmt.Printf("Found %d users in this instance\n", len(result.Payload.Users))
 		if len(result.Payload.Users) > 0 {
-			for i, u := range result.Payload.Users {
-				fmt.Println(i+1, " *********  ", u.Login)
+
+			users := ""
+			for _, u := range result.Payload.Users {
+				users += u.Login + ", "
 			}
+			fmt.Printf("Found %d users in this instance: %s.\n", len(result.Payload.Users), strings.TrimSuffix(users, ", "))
 		}
-		for u, p := range knownPwd {
+		for u, p := range demoUsers {
 			fmt.Println(" ----------------", u, "----------------")
 			if e := listingUserFiles(u, p); e == nil {
 				foundOne = true
@@ -113,61 +95,71 @@ func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		log.Fatal("Cannot execute root command", err)
 	}
-
 }
 
 func init() {
-
-	rootCmd.PersistentFlags().StringVarP(&protocol, "protocol", "t", "", "HTTP or HTTPS")
-	rootCmd.PersistentFlags().StringVarP(&host, "host", "a", "", "FQDN of this server")
-	rootCmd.PersistentFlags().StringVarP(&user, "user", "u", "", "A registered admin user name")
-	rootCmd.PersistentFlags().StringVarP(&pwd, "password", "p", "", "A registered admin user password")
-	rootCmd.PersistentFlags().StringVarP(&id, "clientKey", "k", "", "The front-end client key (can be found in the pydio.json)")
-	rootCmd.PersistentFlags().StringVarP(&secret, "clientSecret", "s", "", "The front-end client secret (can be found in the pydio.json)")
-
+	rootCmd.PersistentFlags().StringVarP(&url, "url", "a", "https://demo.pydio.com", "Full URL of the demo server")
+	rootCmd.PersistentFlags().StringVarP(&user, "user", "u", "admin", "Admin login")
+	rootCmd.PersistentFlags().StringVarP(&pwd, "password", "p", "admin", "Admin password")
+	rootCmd.PersistentFlags().BoolVar(&skipVerify, "skip-verify", false, "Skip TLS verification (unknown authority, uncorrect FQDN)...")
 }
 
-func listingUserFiles(login string, userPass string) error {
+func listingUserFiles(currLogin, currPwd string) error {
 
-	uSdkConfig := &cells_sdk.SdkConfig{
-		Url:          protocol + "://" + host,
-		ClientKey:    id,
-		ClientSecret: secret,
-		User:         login,
-		Password:     userPass,
-		SkipVerify:   skipVerify,
+	sdkConfig := &cells_sdk.SdkConfig{
+		Url:           url,
+		User:          currLogin,
+		Password:      currPwd,
+		SkipVerify:    skipVerify,
+		CustomHeaders: map[string]string{"User-Agent": userAgent},
 	}
 
-	uHttpClient := http.GetHttpClient(uSdkConfig)
-	ctx, t, err := transport.GetRestClientTransport(uSdkConfig, false)
-	if err != nil {
-		return fmt.Errorf("could not log in, not able to fetch the password for %s %s", login, err.Error())
+	ctx, t, e := sdk_rest.GetClientTransport(sdkConfig, false)
+	if e != nil {
+		return fmt.Errorf("could not retrieve client transport for %s, cause: %s", currLogin, e.Error())
 	}
-	uApiClient := client.New(t, strfmt.Default)
+	apiClient := client.New(t, strfmt.Default)
 
 	params := &meta_service.GetBulkMetaParams{
 		Body: &models.RestGetBulkMetaRequest{NodePaths: []string{
 			"/*",
 		}},
-		Context:    ctx,
-		HTTPClient: uHttpClient,
+		Context: ctx,
 	}
 
-	result, err := uApiClient.MetaService.GetBulkMeta(params)
+	result, err := apiClient.MetaService.GetBulkMeta(params)
 	if err != nil {
 		return fmt.Errorf("could not list meta %s", err.Error())
 	}
 
 	if len(result.Payload.Nodes) > 0 {
 		fmt.Printf("* %d meta\n", len(result.Payload.Nodes))
-		fmt.Println("USER ", login)
+		fmt.Println("USER ", currLogin)
 
 		for _, u := range result.Payload.Nodes {
 			fmt.Println("  -", u.Path)
-
 		}
-
 	}
 
 	return nil
+}
+
+func sanityCheck() {
+
+	msg := ""
+
+	if url == "" {
+		msg += "URL, "
+	}
+	if user == "" {
+		msg += "user, "
+	}
+	if pwd == "" {
+		msg += "password, "
+	}
+
+	if msg != "" {
+		msg = strings.TrimSuffix(msg, ", ")
+		log.Fatal("All flags are compuslory. Missings values for: ")
+	}
 }
