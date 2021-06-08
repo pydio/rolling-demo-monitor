@@ -25,13 +25,12 @@ var (
 
 	demoUsers = map[string]string{
 		"admin": "admin",
-		"bob":   "bob",
 		"alice": "alice",
 	}
 )
 
 const (
-	userAgent = "demo-monitor/1.0"
+	userAgent = "demo-monitor/1.1"
 )
 
 var rootCmd = &cobra.Command{
@@ -160,6 +159,6 @@ func sanityCheck() {
 
 	if msg != "" {
 		msg = strings.TrimSuffix(msg, ", ")
-		log.Fatal("All flags are compuslory. Missings values for: ")
+		log.Fatal("All flags are compuslory. Missings values for: " + msg)
 	}
 }
